@@ -119,15 +119,17 @@ const DashboardScreen = memo(function DashboardScreen({ theme, dark }: Props) {
               <p className="text-xs font-semibold mb-3" style={{ color: textPrimary }}>Revenue Trend</p>
               <div className="flex items-end gap-2 h-20">
                 {[65, 45, 80, 55, 90, 70, 85].map((h, i) => (
-                  <div key={i} className="flex-1 flex flex-col items-center gap-1">
-                    <div
-                      className="w-full rounded-t-md transition-all"
-                      style={{
-                        height: `${h}%`,
-                        background: i === 6 ? color.primary[500] : `${color.primary[500]}40`,
-                        borderRadius: `${radius.sm} ${radius.sm} 0 0`,
-                      }}
-                    />
+                  <div key={i} className="flex-1 h-full flex flex-col items-center gap-1">
+                    <div className="flex-1 w-full flex items-end">
+                      <div
+                        className="w-full rounded-t-md transition-all"
+                        style={{
+                          height: `${h}%`,
+                          background: i === 6 ? color.primary[500] : `${color.primary[500]}40`,
+                          borderRadius: `${radius.sm} ${radius.sm} 0 0`,
+                        }}
+                      />
+                    </div>
                     <span className="text-[8px]" style={{ color: textTertiary }}>
                       {["M","T","W","T","F","S","S"][i]}
                     </span>
