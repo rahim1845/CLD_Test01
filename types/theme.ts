@@ -32,7 +32,7 @@ const surfaceColorsSchema = z.object({
   card: hexColor,
   border: hexColor,
   borderSubtle: hexColor,
-  overlay: hexColor,
+  overlay: z.string(),
 });
 
 const textColorsSchema = z.object({
