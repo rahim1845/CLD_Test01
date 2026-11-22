@@ -101,6 +101,8 @@ export function getModePalette(theme: ThemeTokens, dark: boolean): ModePalette {
       soft: mix(background, base, 0.16),
       text: pickReadable([base, mix(base, "#ffffff", 0.3), mix(base, "#ffffff", 0.55)], card, 4.5),
     });
+    const darkPrimary = pickReadable([p[500], p[400], p[300]], background, 2.5);
+    const darkAccent = pickReadable([a[500], a[400], a[300]], background, 2.5);
     const ok = semantic(s.success);
     const warn = semantic(s.warning);
     const err = semantic(s.error);
@@ -118,14 +120,14 @@ export function getModePalette(theme: ThemeTokens, dark: boolean): ModePalette {
       textSecondary: pickReadable([text.secondary, n[300], n[200]], card, 4.5),
       textTertiary: pickReadable([text.tertiary, n[400], n[300]], card, 3),
       textDisabled: text.disabled,
-      primary: p[500],
-      primaryHover: p[400],
-      onPrimary: readableOn(p[500], "#ffffff", p[950]),
+      primary: darkPrimary,
+      primaryHover: mix(darkPrimary, "#ffffff", 0.12),
+      onPrimary: pickReadable(["#ffffff", p[950], "#0b0b0f", "#000000"], darkPrimary, 4.5),
       primarySoft: mix(background, p[500], 0.18),
       primaryText: pickReadable([p[400], p[300], p[200], p[100]], card, 4.5),
-      accent: a[500],
-      accentHover: a[400],
-      onAccent: readableOn(a[500], "#ffffff", a[950]),
+      accent: darkAccent,
+      accentHover: mix(darkAccent, "#ffffff", 0.12),
+      onAccent: pickReadable(["#ffffff", a[950], "#0b0b0f", "#000000"], darkAccent, 4.5),
       accentSoft: mix(background, a[500], 0.18),
       accentText: pickReadable([a[400], a[300], a[200], a[100]], card, 4.5),
       success: ok.base, successSoft: ok.soft, successText: ok.text,
@@ -162,12 +164,12 @@ export function getModePalette(theme: ThemeTokens, dark: boolean): ModePalette {
     textDisabled: n[300],
     primary: p[600],
     primaryHover: p[700],
-    onPrimary: readableOn(p[600], "#ffffff", p[950]),
+    onPrimary: pickReadable(["#ffffff", p[950], "#0b0b0f", "#000000"], p[600], 4.5),
     primarySoft: mix(card, p[500], 0.1),
     primaryText: pickReadable([p[600], p[700], p[800], p[900]], card, 4.5),
     accent: a[600],
     accentHover: a[700],
-    onAccent: readableOn(a[600], "#ffffff", a[950]),
+    onAccent: pickReadable(["#ffffff", a[950], "#0b0b0f", "#000000"], a[600], 4.5),
     accentSoft: mix(card, a[500], 0.1),
     accentText: pickReadable([a[600], a[700], a[800], a[900]], card, 4.5),
     success: ok.base, successSoft: ok.soft, successText: ok.text,

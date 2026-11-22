@@ -19,54 +19,186 @@
   --shell-radius-lg: 14px;
   --font-ui: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  --shell-header-h: 52px;
+  --shell-tabs-h: 48px;
+  --shell-sidebar-w: 340px;
+  --shell-ease: cubic-bezier(0.32, 0.72, 0, 1);
+  --shell-dot: rgba(255, 255, 255, 0.065);
+
+  color-scheme: dark;
 }
 
-body {
-  background: var(--shell-bg);
-  color: var(--shell-text);
-  font-family: var(--font-ui);
-  font-feature-settings: "cv11", "ss01";
-  -webkit-font-smoothing: antialiased;
+@layer base {
+  html {
+    background: var(--shell-bg);
+    -webkit-text-size-adjust: 100%;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    background: var(--shell-bg);
+    color: var(--shell-text);
+    font-family: var(--font-ui);
+    font-feature-settings: "cv11", "ss01", "calt";
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  ::selection {
+    background: rgba(139, 124, 255, 0.32);
+    color: inherit;
+  }
+
+  :where(:focus-visible) {
+    outline: 2px solid var(--shell-accent);
+    outline-offset: 2px;
+  }
+
+  :where(button, [role="button"], [role="tab"], a, summary) {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Scrollbars: hairline thumbs that stay out of the way. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+  }
+
+  *:hover {
+    scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border: 3px solid transparent;
+    border-radius: 999px;
+    background-clip: content-box;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.18);
+    background-clip: content-box;
+  }
+
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
 }
 
-/* Scrollbar styling for dark shell */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+/* Theme previews follow their own text color, so thumbs read on light and dark themes alike. */
+.preview-scroll {
+  scrollbar-color: color-mix(in srgb, currentColor 22%, transparent) transparent;
 }
 
-::-webkit-scrollbar-track {
-  background: #0a0a14;
-}
-
-::-webkit-scrollbar-thumb {
-  background: #1e1e3a;
-  border-radius: 3px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: #2d2d52;
-}
-
-/* Theme preview scrollbar */
 .preview-scroll::-webkit-scrollbar {
-  width: 4px;
-}
-
-.preview-scroll::-webkit-scrollbar-track {
-  background: transparent;
+  width: 8px;
 }
 
 .preview-scroll::-webkit-scrollbar-thumb {
-  background: rgba(255,255,255,0.15);
-  border-radius: 2px;
+  background: color-mix(in srgb, currentColor 22%, transparent);
+  border: 2px solid transparent;
+  background-clip: content-box;
 }
 
-/* Syntax highlighting overrides */
+/* ---------- App shell ---------- */
+
+@layer components {
+  .shell-header {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      "brand name engine"
+      "tabs tabs tabs";
+    grid-template-rows: var(--shell-header-h) var(--shell-tabs-h);
+  }
+
+  @media (min-width: 1024px) {
+    .shell-header {
+      grid-template-columns: var(--shell-sidebar-w) minmax(0, 1fr) auto minmax(0, 1fr);
+      grid-template-areas: "brand name tabs engine";
+      grid-template-rows: var(--shell-header-h);
+    }
+  }
+
+  /* Stacked layout: the canvas fills exactly one screen under the sticky header, so panels keep scrolling internally. */
+  .shell-main {
+    height: calc(100svh - var(--shell-header-h) - var(--shell-tabs-h) - 1px);
+    min-height: 560px;
+    scroll-margin-top: calc(var(--shell-header-h) + var(--shell-tabs-h) + 1px);
+  }
+
+  @media (min-width: 1024px) {
+    .shell-main {
+      height: auto;
+      min-height: 0;
+      scroll-margin-top: 0;
+    }
+  }
+
+  .shell-canvas {
+    position: relative;
+    isolation: isolate;
+    background-color: var(--shell-bg);
+  }
+
+  .shell-canvas::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background-image: radial-gradient(circle at center, var(--shell-dot) 1px, transparent 1.2px);
+    background-size: 20px 20px;
+    background-position: 10px 10px;
+    -webkit-mask-image: radial-gradient(ellipse 120% 90% at 50% 0%, #000 35%, transparent 100%);
+    mask-image: radial-gradient(ellipse 120% 90% at 50% 0%, #000 35%, transparent 100%);
+  }
+
+  .shell-panel-in {
+    animation: shell-panel-in 220ms var(--shell-ease) both;
+  }
+}
+
+@keyframes shell-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shell-panel-in {
+    animation: none;
+  }
+
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Syntax highlighting */
 .hljs {
-  background: #0a0a14 !important;
+  background: var(--shell-panel) !important;
   padding: 1rem !important;
-  border-radius: 0.5rem !important;
+  border-radius: var(--shell-radius) !important;
+  font-family: var(--font-mono) !important;
   font-size: 0.8rem !important;
   line-height: 1.6 !important;
 }
