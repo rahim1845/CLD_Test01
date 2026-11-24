@@ -3,6 +3,8 @@
 import { memo, useEffect, useRef, useState, type ComponentType } from "react";
 import { LayoutDashboard, Lock, Moon, PanelTop, Settings2, Smartphone, Sun, type LucideIcon } from "lucide-react";
 import { useThemeStore, type PreviewScreen } from "@/store/themeStore";
+import { cn } from "@/components/ui/cn";
+import { PANEL_TOOLBAR_CLASS } from "@/components/ui/panel";
 import { SegmentedControl, type SegmentedOption } from "@/components/ui/SegmentedControl";
 import { PREVIEW_CSS, type ScreenProps } from "./kit";
 import DashboardScreen from "./screens/DashboardScreen";
@@ -46,7 +48,7 @@ const SCREENS: Record<PreviewScreen, ScreenMeta> = {
     label: "Mobile",
     tooltip: "Mobile app",
     icon: Smartphone,
-    fit: { width: 760, height: 736 },
+    fit: { width: 760, height: 748 },
     Screen: MobileScreen,
   },
   landing: {
@@ -147,14 +149,14 @@ const PreviewContainer = memo(function PreviewContainer() {
         {PREVIEW_CSS}
       </style>
 
-      <div className="@container/toolbar shrink-0 border-b border-[var(--shell-border)]">
-        <div className="flex h-12 items-center justify-between gap-3 px-3 sm:px-4 lg:px-5">
+      <div className="@container/toolbar shrink-0">
+        <div className={cn(PANEL_TOOLBAR_CLASS, "justify-between")}>
           <SegmentedControl
             aria-label="Preview screen"
             options={SCREEN_OPTIONS}
             value={activeScreen}
             onChange={setActiveScreen}
-            className="[&_button]:gap-0 @xl/toolbar:[&_button]:gap-1.5"
+            className="auto-cols-auto [&_button]:gap-0 @xl/toolbar:[&_button]:gap-1.5"
           />
           <div className="flex items-center gap-3">
             {viewport && (

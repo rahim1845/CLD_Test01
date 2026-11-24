@@ -36,8 +36,6 @@ const QUICK_ACTIONS: { icon: LucideIcon; label: string }[] = [
   { icon: LayoutGrid, label: "More" },
 ];
 
-const CHIPS = ["All", "Income", "Spending", "Bills", "Savings"];
-
 const ACTIVITY: { icon: LucideIcon; tone: Tone; title: string; meta: string; amount: string; credit?: boolean }[] = [
   { icon: Coffee, tone: "warning", title: "Blue Bottle Coffee", meta: "Today, 8:24 AM", amount: "−$6.40" },
   {
@@ -67,7 +65,7 @@ function Phone({ label, className, children }: { label: string; className?: stri
     <figure
       aria-label={label}
       className={cx(
-        "relative h-[652px] w-[316px] shrink-0 rounded-[54px] bg-[var(--pv-device)] p-[11px]",
+        "relative h-[684px] w-[316px] shrink-0 rounded-[54px] bg-[var(--pv-device)] p-[11px]",
         "shadow-[var(--pv-sh-2xl),inset_0_0_0_1px_rgb(255_255_255/0.14),inset_0_0_0_3px_rgb(0_0_0/0.4),0_0_0_1px_var(--pv-device-edge)]",
         className,
       )}
@@ -193,24 +191,6 @@ function HomeScreen() {
               {label}
             </span>
           </div>
-        ))}
-      </div>
-
-      <div className="mt-5 flex gap-2 overflow-hidden px-5">
-        {CHIPS.map((chip, i) => (
-          <span
-            key={chip}
-            className={cx(
-              "inline-flex h-8 shrink-0 items-center rounded-[var(--pv-r-full)] px-3.5",
-              TX,
-              i === 0
-                ? "bg-[var(--pv-text)] text-[var(--pv-bg)]"
-                : "border border-[var(--pv-border)] bg-[var(--pv-surface)] text-[var(--pv-text-2)]",
-            )}
-            style={type("xs", i === 0 ? "semibold" : "medium")}
-          >
-            {chip}
-          </span>
         ))}
       </div>
 
@@ -390,11 +370,11 @@ const MobileScreen = memo(function MobileScreen({ theme, dark }: ScreenProps) {
         }}
       />
       <div className="relative flex min-h-full">
-        <div className="m-auto flex flex-wrap items-center justify-center gap-x-16 gap-y-10 px-6 py-10 animate-[pv-rise_var(--pv-dur-slower)_var(--pv-ease)_both]">
+        <div className="m-auto flex flex-wrap items-center justify-center gap-x-16 gap-y-10 px-6 py-8 animate-[pv-rise_var(--pv-dur-slower)_var(--pv-ease)_both]">
           <Phone label="Wallet home screen">
             <HomeScreen />
           </Phone>
-          <Phone label="Send money screen" className="md:translate-y-6">
+          <Phone label="Send money screen">
             <SendScreen />
           </Phone>
         </div>

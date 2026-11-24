@@ -518,23 +518,21 @@ const SettingsScreen = memo(function SettingsScreen({ theme, dark }: ScreenProps
     <div className="relative flex h-full min-w-[960px] flex-col" style={vars}>
       <TopNav />
       <div className="preview-scroll min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-[1120px] px-[var(--pv-sp-8)] pb-40 pt-[var(--pv-sp-8)] animate-[pv-rise_var(--pv-dur-slow)_var(--pv-ease)_both]">
-          <div className="mb-[var(--pv-sp-8)]">
-            <h1 style={type("3xl", "semibold", "display")}>Settings</h1>
-            <p className="mt-1.5 text-[var(--pv-text-2)]" style={type("base")}>
-              Manage your profile, notifications and workspace preferences.
-            </p>
+        <div className="mx-auto grid max-w-[1120px] grid-cols-[200px_minmax(0,1fr)] items-start gap-[var(--pv-sp-10)] px-[var(--pv-sp-8)] pb-40 pt-[var(--pv-sp-8)] animate-[pv-rise_var(--pv-dur-slow)_var(--pv-ease)_both]">
+          <div className="sticky top-[var(--pv-sp-8)] flex flex-col gap-[var(--pv-sp-6)]">
+            <div className="px-3">
+              <h1 style={type("2xl", "semibold", "display")}>Settings</h1>
+              <p className="mt-1 text-[var(--pv-text-3)]" style={type("xs")}>
+                Acme Inc · Growth plan
+              </p>
+            </div>
+            <SettingsNav />
           </div>
-          <div className="grid grid-cols-[200px_minmax(0,1fr)] items-start gap-[var(--pv-sp-10)]">
-            <div className="sticky top-[var(--pv-sp-6)]">
-              <SettingsNav />
-            </div>
-            <div className="flex max-w-[720px] flex-col gap-[var(--pv-sp-6)]">
-              <ProfileSection />
-              <NotificationsSection />
-              <PlanSection />
-              <DangerZone />
-            </div>
+          <div className="flex max-w-[760px] flex-col gap-[var(--pv-sp-6)]">
+            <ProfileSection />
+            <NotificationsSection />
+            <PlanSection />
+            <DangerZone />
           </div>
         </div>
       </div>

@@ -1,32 +1,27 @@
 "use client";
 
-import { useThemeStore } from "@/store/themeStore";
+import { Blend, Pipette, Type } from "lucide-react";
+import { SegmentedControl, type SegmentedOption } from "@/components/ui/SegmentedControl";
 import type { GenerateMode } from "@/types/theme";
+import { SectionLabel } from "@/components/ui/SectionLabel";
 
-const MODES: { value: GenerateMode; label: string }[] = [
-  { value: "prompt", label: "Prompt" },
-  { value: "color", label: "Color" },
-  { value: "both", label: "Both" },
+const MODES: SegmentedOption<GenerateMode>[] = [
+  { value: "prompt", label: "Prompt", icon: Type },
+  { value: "color", label: "Color", icon: Pipette },
+  { value: "both", label: "Both", icon: Blend },
 ];
 
-export default function ModeSelector() {
-  const { generateMode, setGenerateMode } = useThemeStore();
-
+export default function ModeSelector({
+  value,
+  onChange,
+}: {
+  value: GenerateMode;
+  onChange: (mode: GenerateMode) => void;
+}) {
   return (
-    <div className="flex rounded-lg overflow-hidden border border-[#12122a] bg-[#0a0a14]">
-      {MODES.map((m) => (
-        <button
-          key={m.value}
-          onClick={() => setGenerateMode(m.value)}
-          className={`flex-1 py-2 text-sm font-medium transition-colors ${
-            generateMode === m.value
-              ? "bg-indigo-600 text-white"
-              : "text-[#9090b8] hover:text-[#ddddf0] hover:bg-[#12122a]"
-          }`}
-        >
-          {m.label}
-        </button>
-      ))}
+    <div className="flex flex-col gap-2">
+      <SectionLabel id="tf-source-label">Start from</SectionLabel>
+      <SegmentedControl aria-label="Start from" options={MODES} value={value} onChange={onChange} fullWidth />
     </div>
   );
 }

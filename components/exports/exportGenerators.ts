@@ -1,188 +1,749 @@
 import type { ThemeTokens } from "@/types/theme";
+import { getModePalette, type ModePalette } from "@/lib/modePalette";
+import { googleFontsHref } from "@/lib/engine/typography";
+import {
+  ROLE_GROUPS,
+  ROLE_KEYS,
+  SCALES,
+  STOPS,
+  asNumber,
+  cssVar,
+  fontList,
+  kebab,
+  parseEasing,
+  parseShadow,
+  primaryFamily,
+  roleAliasResolver,
+  roleVar,
+  scssVar,
+  splitTopLevel,
+  toHexColor,
+  tokenGroups,
+  type RoleKey,
+  type TokenGroup,
+  type TokenType,
+} from "./tokenModel";
 
-export function generateCSSVars(theme: ThemeTokens): string {
-  const lines: string[] = [":root {"];
-  const stops = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950] as const;
+export type ExportFormatId = "css" | "scss" | "js" | "stylemap" | "tailwind" | "w3c" | "figma";
+export type ExportLanguage = "css" | "scss" | "js" | "json";
 
-  for (const stop of stops) {
-    lines.push(`  --color-primary-${stop}: ${theme.color.primary[stop]};`);
-  }
-  for (const stop of stops) {
-    lines.push(`  --color-neutral-${stop}: ${theme.color.neutral[stop]};`);
-  }
-  for (const stop of stops) {
-    lines.push(`  --color-accent-${stop}: ${theme.color.accent[stop]};`);
-  }
-
-  lines.push("");
-  for (const [k, v] of Object.entries(theme.color.semantic)) {
-    lines.push(`  --color-semantic-${k}: ${v};`);
-  }
-  lines.push("");
-  for (const [k, v] of Object.entries(theme.color.surface)) {
-    lines.push(`  --color-surface-${k}: ${v};`);
-  }
-  lines.push("");
-  for (const [k, v] of Object.entries(theme.color.text)) {
-    lines.push(`  --color-text-${k}: ${v};`);
-  }
-  lines.push("");
-  for (const [k, v] of Object.entries(theme.typography.fontFamily)) {
-    lines.push(`  --font-family-${k}: ${v};`);
-  }
-  for (const [k, v] of Object.entries(theme.typography.fontSize)) {
-    lines.push(`  --font-size-${k}: ${v};`);
-  }
-  for (const [k, v] of Object.entries(theme.typography.fontWeight)) {
-    lines.push(`  --font-weight-${k}: ${v};`);
-  }
-  lines.push("");
-  for (const [k, v] of Object.entries(theme.spacing)) {
-    lines.push(`  --spacing-${k}: ${v};`);
-  }
-  for (const [k, v] of Object.entries(theme.radius)) {
-    lines.push(`  --radius-${k}: ${v};`);
-  }
-  lines.push("");
-  for (const [k, v] of Object.entries(theme.shadow)) {
-    lines.push(`  --shadow-${k}: ${v};`);
-  }
-  lines.push("}");
-  return lines.join("\n");
+export interface ExportInput {
+  theme: ThemeTokens;
+  name: string;
 }
 
-export function generateSCSSTokens(theme: ThemeTokens): string {
-  const lines: string[] = [];
-  const stops = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950] as const;
+export interface ExportFormat {
+  id: ExportFormatId;
+  label: string;
+  description: string;
+  fileName: string;
+  language: ExportLanguage;
+  mime: string;
+  hint: string;
+  usage: string;
+  generate: (input: ExportInput) => string;
+}
 
-  lines.push("// === Color Scales ===");
-  for (const scale of ["primary", "neutral", "accent"] as const) {
-    for (const stop of stops) {
-      lines.push(`$color-${scale}-${stop}: ${theme.color[scale][stop]};`);
+/* ---------- Serialization ---------- */
+
+class Raw {
+  constructor(readonly code: string) {}
+}
+
+class Obj {
+  constructor(readonly entries: [string, Value][]) {}
+}
+
+type Value = string | number | boolean | Raw | Obj | Value[];
+
+const obj = (entries: [string, Value][]) => new Obj(entries);
+const raw = (code: string) => new Raw(code);
+
+function jsString(s: string): string {
+  if (s.includes('"') && !s.includes("'")) return `'${s.replace(/\\/g, "\\\\")}'`;
+  return JSON.stringify(s);
+}
+
+function jsKey(key: string): string {
+  return /^[A-Za-z_$][\w$]*$/.test(key) || /^(0|[1-9]\d*)$/.test(key) ? key : jsString(key);
+}
+
+function serialize(value: Value, style: "js" | "json", depth = 0): string {
+  const pad = "  ".repeat(depth + 1);
+  const end = "  ".repeat(depth);
+  if (typeof value === "string") return style === "js" ? jsString(value) : JSON.stringify(value);
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (value instanceof Raw) return value.code;
+  if (Array.isArray(value)) {
+    if (!value.length) return "[]";
+    const items = value.map((v) => serialize(v, style, depth + 1));
+    const inline = `[${items.join(", ")}]`;
+    if (value.every((v) => !(v instanceof Obj) && !Array.isArray(v)) && inline.length <= 72) return inline;
+    return `[\n${items.map((i) => pad + i).join(",\n")}${style === "js" ? "," : ""}\n${end}]`;
+  }
+  if (!value.entries.length) return "{}";
+  const pairs = value.entries.map(([k, v]) => `${style === "js" ? jsKey(k) : JSON.stringify(k)}: ${serialize(v, style, depth + 1)}`);
+  const leaf = value.entries.every(([, v]) => !(v instanceof Obj) && !Array.isArray(v));
+  const inline = `{ ${pairs.join(", ")} }`;
+  if (leaf && value.entries.length <= 3 && inline.length <= 64) return inline;
+  return `{\n${pairs.map((p) => pad + p).join(",\n")}${style === "js" ? "," : ""}\n${end}}`;
+}
+
+/* ---------- Shared helpers ---------- */
+
+function displayName(name: string): string {
+  const clean = name.replace(/\*\/|[\r\n]+/g, " ").replace(/\s+/g, " ").trim();
+  return clean || "Untitled theme";
+}
+
+/** Keeps a token value from closing a declaration or block early. */
+function cssValue(value: string): string {
+  return value.replace(/[;{}\r\n]+/g, " ").trim();
+}
+
+function modes(theme: ThemeTokens): { light: ModePalette; dark: ModePalette } {
+  return { light: getModePalette(theme, false), dark: getModePalette(theme, true) };
+}
+
+/** Groups nested by their path ({color: {primary: …}}), with a leaf builder per token. */
+function nestGroups(groups: TokenGroup[], leaf: (group: TokenGroup, key: string, value: string) => Value | null): Obj {
+  const root = obj([]);
+  for (const group of groups) {
+    let node = root;
+    for (const segment of group.path) {
+      let child = node.entries.find(([k]) => k === segment)?.[1];
+      if (!(child instanceof Obj)) {
+        child = obj([]);
+        node.entries.push([segment, child]);
+      }
+      node = child;
+    }
+    for (const token of group.tokens) {
+      const v = leaf(group, token.key, token.value);
+      if (v !== null) node.entries.push([token.key, v]);
     }
   }
-  lines.push("\n// === Semantic Colors ===");
-  for (const [k, v] of Object.entries(theme.color.semantic)) {
-    lines.push(`$color-semantic-${k}: ${v};`);
-  }
-  lines.push("\n// === Surface ===");
-  for (const [k, v] of Object.entries(theme.color.surface)) {
-    lines.push(`$color-surface-${k}: ${v};`);
-  }
-  lines.push("\n// === Typography ===");
-  for (const [k, v] of Object.entries(theme.typography.fontFamily)) {
-    lines.push(`$font-family-${k}: '${v}';`);
-  }
-  for (const [k, v] of Object.entries(theme.typography.fontSize)) {
-    lines.push(`$font-size-${k}: ${v};`);
-  }
-  lines.push("\n// === Spacing ===");
-  for (const [k, v] of Object.entries(theme.spacing)) {
-    lines.push(`$spacing-${k}: ${v};`);
-  }
-  lines.push("\n// === Radius & Shadows ===");
-  for (const [k, v] of Object.entries(theme.radius)) {
-    lines.push(`$radius-${k}: ${v};`);
-  }
-  for (const [k, v] of Object.entries(theme.shadow)) {
-    lines.push(`$shadow-${k}: ${v};`);
-  }
-  return lines.join("\n");
+  return root;
 }
 
-export function generateJSObject(theme: ThemeTokens): string {
-  return `const theme = ${JSON.stringify(theme, null, 2)}`;
+/** Native JS/JSON value: numbers for weights, line heights and z-indices. */
+function nativeValue(type: TokenType, value: string): string | number {
+  if (type === "fontWeight" || type === "number") return asNumber(value) ?? value;
+  return value;
 }
 
-export function generateStyleMap(theme: ThemeTokens): string {
-  const stops = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950] as const;
-  const colors: Record<string, string> = {};
-  for (const stop of stops) {
-    colors[`primary${stop}`] = theme.color.primary[stop];
-    colors[`neutral${stop}`] = theme.color.neutral[stop];
-    colors[`accent${stop}`] = theme.color.accent[stop];
-  }
-  Object.assign(colors, theme.color.semantic, theme.color.surface, theme.color.text);
-
-  return `const colors = ${JSON.stringify(colors, null, 2)}
-
-const radius = ${JSON.stringify(theme.radius, null, 2)}
-
-const shadows = ${JSON.stringify(theme.shadow, null, 2)}`;
+function headerLines(name: string, lines: string[], style: "block" | "line"): string {
+  const body = [`${displayName(name)} · design tokens`, "Generated by ThemeForge.", ...(lines.length ? ["", ...lines] : [])];
+  if (style === "line") return body.map((l) => (l ? `// ${l}` : "//")).join("\n");
+  return ["/**", ...body.map((l) => (l ? ` * ${l}` : " *")), " */"].join("\n");
 }
 
-export function generateTailwindExtend(theme: ThemeTokens): string {
-  const stops = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950] as const;
-  const primary: Record<string, string> = {};
-  const accent: Record<string, string> = {};
-  const neutral: Record<string, string> = {};
-  for (const s of stops) {
-    primary[s] = theme.color.primary[s];
-    accent[s] = theme.color.accent[s];
-    neutral[s] = theme.color.neutral[s];
+/* ---------- CSS ---------- */
+
+export function generateCSS({ theme, name }: ExportInput): string {
+  const groups = tokenGroups(theme);
+  const alias = roleAliasResolver(theme);
+  const { light, dark } = modes(theme);
+  const fonts = googleFontsHref(theme);
+
+  const roleLines = (palette: ModePalette, indent: string) =>
+    ROLE_GROUPS.flatMap((g, i) => [
+      ...(i ? [""] : []),
+      `${indent}/* ${g.label} */`,
+      ...g.roles.map(({ key }) => {
+        const path = alias(key, palette[key]);
+        return `${indent}${roleVar(key)}: ${path ? `var(${cssVar(path)})` : cssValue(palette[key])};`;
+      }),
+    ]);
+
+  const out: string[] = [
+    headerLines(
+      name,
+      [
+        "Primitives (--color-*, --font-*, --spacing-* ...) are the same in every mode.",
+        "Role tokens (--background, --text, --primary ...) follow the color scheme:",
+        "they match the OS setting, and data-theme=\"light\" or data-theme=\"dark\"",
+        "on <html> or any element forces a mode for that subtree.",
+      ],
+      "block",
+    ),
+  ];
+  if (fonts) out.push("", `@import url("${fonts}");`);
+
+  out.push("", ":root {");
+  groups.forEach((group, i) => {
+    if (i) out.push("");
+    out.push(`  /* ${group.label} */`);
+    for (const token of group.tokens) out.push(`  ${cssVar([...group.path, token.key])}: ${cssValue(token.value)};`);
+  });
+  out.push("}");
+
+  out.push("", ":root,", '[data-theme="dark"] {', "  color-scheme: dark;", "", ...roleLines(dark, "  "), "}");
+  out.push("", '[data-theme="light"] {', "  color-scheme: light;", "", ...roleLines(light, "  "), "}");
+  out.push(
+    "",
+    "@media (prefers-color-scheme: light) {",
+    "  :root:not([data-theme]) {",
+    "    color-scheme: light;",
+    "",
+    ...roleLines(light, "    "),
+    "  }",
+    "}",
+  );
+  return out.join("\n") + "\n";
+}
+
+/* ---------- SCSS ---------- */
+
+export function generateSCSS({ theme, name }: ExportInput): string {
+  const groups = tokenGroups(theme);
+  const alias = roleAliasResolver(theme);
+  const { light, dark } = modes(theme);
+
+  const out: string[] = [
+    headerLines(
+      name,
+      [
+        'Load with @use "tokens" as *;',
+        "Primitives are plain variables. Light and dark role colors live in the",
+        "$theme-light and $theme-dark maps; emit them as custom properties with",
+        "  :root { @include theme-vars($theme-dark); }",
+        '  [data-theme="light"] { @include theme-vars($theme-light); }',
+      ],
+      "line",
+    ),
+  ];
+
+  for (const group of groups) {
+    out.push("", `// ${group.label}`);
+    for (const token of group.tokens) out.push(`${scssVar([...group.path, token.key])}: ${cssValue(token.value)};`);
   }
 
-  const obj = {
-    colors: {
-      primary,
-      accent,
-      neutral,
-      ...theme.color.semantic,
-    },
-    fontFamily: theme.typography.fontFamily,
-    fontSize: theme.typography.fontSize,
-    borderRadius: theme.radius,
-    boxShadow: theme.shadow,
-    spacing: theme.spacing,
+  out.push("", "// Scale maps, for @each loops");
+  for (const scale of SCALES) {
+    out.push(`${scssVar(["color", scale])}: (`);
+    STOPS.forEach((stop, i) => out.push(`  ${stop}: ${scssVar(["color", scale, String(stop)])}${i < STOPS.length - 1 ? "," : ""}`));
+    out.push(");");
+  }
+
+  const roleMap = (label: string, palette: ModePalette) => {
+    out.push("", `$theme-${label}: (`);
+    ROLE_KEYS.forEach((key, i) => {
+      const path = alias(key, palette[key]);
+      const value = path ? scssVar(path) : cssValue(palette[key]);
+      out.push(`  "${kebab(key)}": ${value}${i < ROLE_KEYS.length - 1 ? "," : ""}`);
+    });
+    out.push(");");
+  };
+  out.push("", "// Role colors per mode");
+  roleMap("dark", dark);
+  roleMap("light", light);
+
+  out.push(
+    "",
+    "@mixin theme-vars($theme) {",
+    "  @each $name, $value in $theme {",
+    "    --#{$name}: #{$value};",
+    "  }",
+    "}",
+  );
+  return out.join("\n") + "\n";
+}
+
+/* ---------- JS object ---------- */
+
+function themeTree(theme: ThemeTokens): Obj {
+  const { light, dark } = modes(theme);
+  const tree = nestGroups(tokenGroups(theme), (group, _key, value) => nativeValue(group.type, value));
+  const roles = (palette: ModePalette) => obj(ROLE_KEYS.map((key) => [key, palette[key]]));
+  tree.entries.push(["modes", obj([["light", roles(light)], ["dark", roles(dark)]])]);
+  return tree;
+}
+
+export function generateJS({ theme, name }: ExportInput): string {
+  return [
+    headerLines(
+      name,
+      [
+        "theme.color.primary[500] mirrors --color-primary-500 in tokens.css, and",
+        "theme.modes.dark.surface mirrors --surface under data-theme=\"dark\".",
+      ],
+      "block",
+    ),
+    "",
+    `export const theme = ${serialize(themeTree(theme), "js")};`,
+    "",
+    "export default theme;",
+    "",
+  ].join("\n");
+}
+
+/* ---------- Style map (React inline styles) ---------- */
+
+export function generateStyleMap({ theme, name }: ExportInput): string {
+  const { light, dark } = modes(theme);
+  const t = theme.typography;
+  const num = (v: string): Value => asNumber(v) ?? v;
+  const roles = (palette: ModePalette) => obj(ROLE_KEYS.map((key) => [key, palette[key]]));
+  const keyed = (record: Record<string, string>) => obj(Object.entries(record).map(([k, v]) => [k, v]));
+  const typeStyle = (
+    family: "display" | "body" | "mono",
+    size: keyof typeof t.fontSize,
+    weight: keyof typeof t.fontWeight,
+    leading: keyof typeof t.lineHeight,
+    tracking: keyof typeof t.letterSpacing,
+    extra: [string, Value][] = [],
+  ) =>
+    obj([
+      ["fontFamily", raw(`font.${family}`)],
+      ["fontSize", t.fontSize[size]],
+      ["fontWeight", num(t.fontWeight[weight])],
+      ["lineHeight", num(t.lineHeight[leading])],
+      ["letterSpacing", t.letterSpacing[tracking]],
+      ...extra,
+    ]);
+
+  const text = obj([
+    ["display", typeStyle("display", "6xl", "bold", "tight", "tighter")],
+    ["h1", typeStyle("display", "5xl", "bold", "tight", "tight")],
+    ["h2", typeStyle("display", "4xl", "semibold", "tight", "tight")],
+    ["h3", typeStyle("display", "3xl", "semibold", "snug", "tight")],
+    ["h4", typeStyle("display", "2xl", "semibold", "snug", "normal")],
+    ["title", typeStyle("display", "xl", "semibold", "snug", "normal")],
+    ["bodyLarge", typeStyle("body", "lg", "regular", "relaxed", "normal")],
+    ["body", typeStyle("body", "base", "regular", "normal", "normal")],
+    ["label", typeStyle("body", "sm", "medium", "snug", "normal")],
+    ["small", typeStyle("body", "sm", "regular", "normal", "normal")],
+    ["caption", typeStyle("body", "xs", "medium", "normal", "wider", [["textTransform", "uppercase"]])],
+    ["code", typeStyle("mono", "sm", "regular", "normal", "normal")],
+  ]);
+
+  const d = theme.animation.duration;
+  const e = theme.animation.easing;
+  const transition = ["color", "background-color", "border-color", "box-shadow"].map((p) => `${p} ${d.normal} ${e.easeOut}`).join(", ");
+  const s = (v: string) => jsString(v);
+  const z = (v: string) => String(asNumber(v) ?? jsString(v));
+
+  const createStyles = `export function createStyles(mode = "dark") {
+  const c = palette[mode] ?? palette.dark;
+  const transition = ${s(transition)};
+  const button = {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: space[2],
+    padding: \`\${space[2]} \${space[4]}\`,
+    fontFamily: font.body,
+    fontSize: ${s(t.fontSize.sm)},
+    fontWeight: ${z(t.fontWeight.medium)},
+    lineHeight: ${z(t.lineHeight.snug)},
+    borderRadius: radius.lg,
+    border: "1px solid transparent",
+    cursor: "pointer",
+    transition,
+  };
+  const badge = {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: space[1],
+    padding: \`2px \${space[2]}\`,
+    borderRadius: radius.full,
+    fontFamily: font.body,
+    fontSize: ${s(t.fontSize.xs)},
+    fontWeight: ${z(t.fontWeight.medium)},
+    lineHeight: ${z(t.lineHeight.normal)},
   };
 
-  return `// tailwind.config.js  →  theme.extend
-extend: ${JSON.stringify(obj, null, 2)}`;
+  return {
+    page: { background: c.background, color: c.text, fontFamily: font.body, fontSize: ${s(t.fontSize.base)}, lineHeight: ${z(t.lineHeight.normal)} },
+    surface: { background: c.surface, color: c.text, border: \`1px solid \${c.border}\`, borderRadius: radius.xl, boxShadow: shadow.sm },
+    raised: { background: c.surfaceRaised, color: c.text, border: \`1px solid \${c.border}\`, borderRadius: radius.xl, boxShadow: shadow.lg },
+    sunken: { background: c.surfaceSunken, borderRadius: radius.lg },
+    divider: { height: "1px", border: 0, background: c.borderSubtle },
+    textSecondary: { color: c.textSecondary },
+    textTertiary: { color: c.textTertiary },
+    link: { color: c.primaryText, textDecoration: "underline", textUnderlineOffset: "3px" },
+    button,
+    buttonPrimary: { ...button, background: c.primary, color: c.onPrimary },
+    buttonPrimaryHover: { background: c.primaryHover },
+    buttonAccent: { ...button, background: c.accent, color: c.onAccent },
+    buttonSecondary: { ...button, background: c.surface, color: c.text, borderColor: c.border },
+    buttonGhost: { ...button, background: "transparent", color: c.textSecondary },
+    input: {
+      fontFamily: font.body,
+      fontSize: ${s(t.fontSize.sm)},
+      color: c.text,
+      background: c.surface,
+      border: \`1px solid \${c.border}\`,
+      borderRadius: radius.lg,
+      padding: \`\${space[2]} \${space[3]}\`,
+      outline: "none",
+      transition,
+    },
+    inputFocus: { borderColor: c.primary, boxShadow: \`0 0 0 3px \${c.primarySoft}\` },
+    badge,
+    badgePrimary: { ...badge, background: c.primarySoft, color: c.primaryText },
+    badgeAccent: { ...badge, background: c.accentSoft, color: c.accentText },
+    badgeSuccess: { ...badge, background: c.successSoft, color: c.successText },
+    badgeWarning: { ...badge, background: c.warningSoft, color: c.warningText },
+    badgeError: { ...badge, background: c.errorSoft, color: c.errorText },
+    badgeInfo: { ...badge, background: c.infoSoft, color: c.infoText },
+    overlay: { position: "fixed", inset: 0, background: c.overlay, backdropFilter: \`blur(\${blur.sm})\`, zIndex: zIndex.overlay },
+    modal: { background: c.surfaceRaised, color: c.text, border: \`1px solid \${c.border}\`, borderRadius: radius["2xl"], boxShadow: shadow["2xl"], zIndex: zIndex.modal },
+    code: { fontFamily: font.mono, fontSize: "0.9em", background: c.surfaceSunken, borderRadius: radius.sm, padding: "0.15em 0.4em" },
+  };
+}`;
+
+  const zIndex = obj(Object.entries(theme.zIndex).map(([k, v]) => [k, asNumber(v) ?? v]));
+
+  return [
+    headerLines(
+      name,
+      [
+        "Inline-style objects for React, built from the tokens.",
+        "",
+        '  import { createStyles, text } from "./styles";',
+        '  const s = createStyles("dark");',
+        "  <div style={s.surface}><h2 style={text.h2}>Hello</h2></div>",
+      ],
+      "block",
+    ),
+    "",
+    `export const palette = ${serialize(obj([["light", roles(light)], ["dark", roles(dark)]]), "js")};`,
+    "",
+    `export const font = ${serialize(keyed(t.fontFamily), "js")};`,
+    "",
+    `export const space = ${serialize(keyed(theme.spacing as Record<string, string>), "js")};`,
+    "",
+    `export const radius = ${serialize(keyed(theme.radius), "js")};`,
+    "",
+    `export const shadow = ${serialize(keyed(theme.shadow), "js")};`,
+    "",
+    `export const blur = ${serialize(keyed(theme.blur), "js")};`,
+    "",
+    `export const zIndex = ${serialize(zIndex, "js")};`,
+    "",
+    `export const motion = ${serialize(obj([["duration", keyed(d)], ["easing", keyed(e)]]), "js")};`,
+    "",
+    `export const text = ${serialize(text, "js")};`,
+    "",
+    createStyles,
+    "",
+  ].join("\n");
 }
 
-export function generateW3CTokens(theme: ThemeTokens): string {
-  const stops = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950] as const;
-  const tokens: Record<string, unknown> = {
-    color: {
-      primary: Object.fromEntries(stops.map((s) => [s, { $value: theme.color.primary[s], $type: "color" }])),
-      accent: Object.fromEntries(stops.map((s) => [s, { $value: theme.color.accent[s], $type: "color" }])),
-      neutral: Object.fromEntries(stops.map((s) => [s, { $value: theme.color.neutral[s], $type: "color" }])),
-      semantic: Object.fromEntries(Object.entries(theme.color.semantic).map(([k, v]) => [k, { $value: v, $type: "color" }])),
-      surface: Object.fromEntries(Object.entries(theme.color.surface).map(([k, v]) => [k, { $value: v, $type: "color" }])),
-      text: Object.fromEntries(Object.entries(theme.color.text).map(([k, v]) => [k, { $value: v, $type: "color" }])),
-    },
-    typography: {
-      fontFamily: Object.fromEntries(Object.entries(theme.typography.fontFamily).map(([k, v]) => [k, { $value: v, $type: "fontFamily" }])),
-      fontSize: Object.fromEntries(Object.entries(theme.typography.fontSize).map(([k, v]) => [k, { $value: v, $type: "dimension" }])),
-    },
-    spacing: Object.fromEntries(Object.entries(theme.spacing).map(([k, v]) => [k, { $value: v, $type: "dimension" }])),
-    radius: Object.fromEntries(Object.entries(theme.radius).map(([k, v]) => [k, { $value: v, $type: "dimension" }])),
-    shadow: Object.fromEntries(Object.entries(theme.shadow).map(([k, v]) => [k, { $value: v, $type: "shadow" }])),
-  };
-  return JSON.stringify(tokens, null, 2);
+/* ---------- Tailwind ---------- */
+
+function tailwindFamily(stack: string): Value[] {
+  return splitTopLevel(stack).map((item) => (/\s/.test(item) && !/^["']/.test(item) ? `"${item}"` : item));
 }
 
-export function generateFigmaTokens(theme: ThemeTokens): string {
-  const stops = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950] as const;
-  const tokens = {
-    global: {
-      color: {
-        primary: Object.fromEntries(stops.map((s) => [s, { value: theme.color.primary[s], type: "color" }])),
-        accent: Object.fromEntries(stops.map((s) => [s, { value: theme.color.accent[s], type: "color" }])),
-        neutral: Object.fromEntries(stops.map((s) => [s, { value: theme.color.neutral[s], type: "color" }])),
-        semantic: Object.fromEntries(Object.entries(theme.color.semantic).map(([k, v]) => [k, { value: v, type: "color" }])),
-        surface: Object.fromEntries(Object.entries(theme.color.surface).map(([k, v]) => [k, { value: v, type: "color" }])),
-        text: Object.fromEntries(Object.entries(theme.color.text).map(([k, v]) => [k, { value: v, type: "color" }])),
-      },
-      typography: {
-        fontFamily: Object.fromEntries(Object.entries(theme.typography.fontFamily).map(([k, v]) => [k, { value: v, type: "fontFamilies" }])),
-        fontSize: Object.fromEntries(Object.entries(theme.typography.fontSize).map(([k, v]) => [k, { value: v, type: "fontSizes" }])),
-        fontWeight: Object.fromEntries(Object.entries(theme.typography.fontWeight).map(([k, v]) => [k, { value: v, type: "fontWeights" }])),
-      },
-      spacing: Object.fromEntries(Object.entries(theme.spacing).map(([k, v]) => [k, { value: v, type: "spacing" }])),
-      borderRadius: Object.fromEntries(Object.entries(theme.radius).map(([k, v]) => [k, { value: v, type: "borderRadius" }])),
-      boxShadow: Object.fromEntries(Object.entries(theme.shadow).map(([k, v]) => [k, { value: v, type: "boxShadow" }])),
-    },
+export function generateTailwind({ theme, name }: ExportInput): string {
+  const { dark } = modes(theme);
+  const role = (key: RoleKey) => `var(${roleVar(key)}, ${dark[key]})`;
+  const scale = (s: (typeof SCALES)[number], extra: [string, Value][]) =>
+    obj([...STOPS.map((stop): [string, Value] => [String(stop), theme.color[s][stop]]), ...extra]);
+  const record = (r: Record<string, string>) => obj(Object.entries(r).map(([k, v]) => [kebab(k), v]));
+  const status = (k: "success" | "warning" | "error" | "info") =>
+    obj([["DEFAULT", role(k)], ["soft", role(`${k}Soft`)], ["text", role(`${k}Text`)]]);
+
+  const extend = obj([
+    [
+      "colors",
+      obj([
+        ["primary", scale("primary", [["DEFAULT", role("primary")], ["hover", role("primaryHover")], ["soft", role("primarySoft")], ["text", role("primaryText")]])],
+        ["on-primary", role("onPrimary")],
+        ["accent", scale("accent", [["DEFAULT", role("accent")], ["hover", role("accentHover")], ["soft", role("accentSoft")], ["text", role("accentText")]])],
+        ["on-accent", role("onAccent")],
+        ["neutral", scale("neutral", [])],
+        ["success", status("success")],
+        ["warning", status("warning")],
+        ["error", status("error")],
+        ["info", status("info")],
+        ["background", role("background")],
+        ["surface", obj([["DEFAULT", role("surface")], ["raised", role("surfaceRaised")], ["sunken", role("surfaceSunken")]])],
+        ["border", obj([["DEFAULT", role("border")], ["subtle", role("borderSubtle")]])],
+        ["overlay", role("overlay")],
+        ["text", obj([["DEFAULT", role("text")], ["secondary", role("textSecondary")], ["tertiary", role("textTertiary")], ["disabled", role("textDisabled")]])],
+      ]),
+    ],
+    ["fontFamily", obj(Object.entries(theme.typography.fontFamily).map(([k, v]) => [k, tailwindFamily(v)]))],
+    ["fontSize", record(theme.typography.fontSize)],
+    ["fontWeight", record(theme.typography.fontWeight)],
+    ["lineHeight", record(theme.typography.lineHeight)],
+    ["letterSpacing", record(theme.typography.letterSpacing)],
+    ["spacing", record(theme.spacing as Record<string, string>)],
+    ["borderRadius", record(theme.radius)],
+    ["boxShadow", record(theme.shadow)],
+    ["transitionDuration", record(theme.animation.duration)],
+    ["transitionTimingFunction", record(theme.animation.easing)],
+    ["zIndex", record(theme.zIndex)],
+    ["blur", record(theme.blur)],
+    ["backdropBlur", record(theme.blur)],
+  ]);
+
+  return [
+    headerLines(
+      name,
+      [
+        "Tailwind theme extension. Class names match the CSS variable names:",
+        "bg-primary-600 uses --color-primary-600, bg-surface-raised uses --surface-raised.",
+        "Role colors read the variables from tokens.css (so they switch with",
+        "data-theme) and fall back to the dark values when it is not loaded.",
+        "Tailwind v4: load this file from your CSS with @config \"./tailwind.config.js\";",
+        "",
+        "@type {import('tailwindcss').Config}",
+      ],
+      "block",
+    ),
+    `module.exports = ${serialize(obj([["theme", obj([["extend", extend]])]]), "js")};`,
+    "",
+  ].join("\n");
+}
+
+/* ---------- W3C Design Tokens (DTCG) ---------- */
+
+function dtcgShadow(value: string): Value | null {
+  const layers = parseShadow(value);
+  if (layers === null) return null;
+  const none = { inset: false, x: "0px", y: "0px", blur: "0px", spread: "0px", color: "#00000000" };
+  const list = (layers.length ? layers : [none]).map((l) => {
+    const entries: [string, Value][] = [
+      ["color", toHexColor(l.color) ?? l.color],
+      ["offsetX", l.x],
+      ["offsetY", l.y],
+      ["blur", l.blur],
+      ["spread", l.spread],
+    ];
+    if (l.inset) entries.push(["inset", true]);
+    return obj(entries);
+  });
+  return list.length === 1 ? list[0] : list;
+}
+
+function dtcgValue(type: TokenType, value: string): Value | null {
+  switch (type) {
+    case "color":
+      return toHexColor(value) ?? value;
+    case "fontFamily":
+      return fontList(value);
+    case "fontWeight":
+      return asNumber(value) ?? value;
+    case "number":
+      // DTCG numbers must be numeric, so keyword values such as z-index "auto" are left out.
+      return asNumber(value);
+    case "shadow":
+      return dtcgShadow(value);
+    case "cubicBezier":
+      return parseEasing(value);
+    default:
+      return value;
+  }
+}
+
+export function generateW3C({ theme, name }: ExportInput): string {
+  const alias = roleAliasResolver(theme);
+  const { light, dark } = modes(theme);
+  const tree = nestGroups(tokenGroups(theme), (group, _key, value) => {
+    const v = dtcgValue(group.type, value);
+    return v === null ? null : obj([["$value", v]]);
+  });
+
+  const typed = new Map(tokenGroups(theme).map((g) => [g.path.join("."), g.type]));
+  const addTypes = (node: Obj, path: string[]) => {
+    for (const [key, child] of node.entries) {
+      if (!(child instanceof Obj) || key.startsWith("$")) continue;
+      const childPath = [...path, key];
+      const type = typed.get(childPath.join("."));
+      if (type) child.entries.unshift(["$type", type]);
+      else addTypes(child, childPath);
+    }
   };
-  return JSON.stringify(tokens, null, 2);
+  addTypes(tree, []);
+
+  const modeGroup = (palette: ModePalette) =>
+    obj(
+      ROLE_KEYS.map((key) => {
+        const path = alias(key, palette[key]);
+        return [key, obj([["$value", path ? `{${path.join(".")}}` : toHexColor(palette[key]) ?? palette[key]]])];
+      }),
+    );
+
+  const root = obj([
+    ["$description", `${displayName(name)} · generated by ThemeForge`],
+    ...tree.entries,
+    ["modes", obj([["$type", "color"], ["light", modeGroup(light)], ["dark", modeGroup(dark)]])],
+  ]);
+  return serialize(root, "json") + "\n";
+}
+
+/* ---------- Figma (Tokens Studio) ---------- */
+
+const STUDIO_TYPES: Record<string, string> = {
+  "font.family": "fontFamilies",
+  "font.size": "fontSizes",
+  "font.weight": "fontWeights",
+  lineHeight: "lineHeights",
+  letterSpacing: "letterSpacing",
+  spacing: "spacing",
+  radius: "borderRadius",
+  shadow: "boxShadow",
+  duration: "other",
+  easing: "other",
+  zIndex: "other",
+  blur: "dimension",
+};
+
+function studioPx(length: string): string {
+  return length.replace(/px$/, "");
+}
+
+function studioValue(group: TokenGroup, value: string): Value {
+  const id = group.path.join(".");
+  if (group.type === "color") return value;
+  if (id === "font.family") return primaryFamily(value);
+  if (id === "lineHeight") {
+    const n = asNumber(value);
+    return n === null ? value : `${Math.round(n * 1000) / 10}%`;
+  }
+  if (id === "letterSpacing") {
+    const m = /^(-?\d*\.?\d+)em$/.exec(value);
+    return m ? `${Math.round(parseFloat(m[1]) * 1000) / 10}%` : value;
+  }
+  if (id === "shadow") {
+    const layers = parseShadow(value);
+    if (layers === null) return value;
+    const list = (layers.length ? layers : [{ inset: false, x: "0", y: "0", blur: "0", spread: "0", color: "rgba(0,0,0,0)" }]).map((l) =>
+      obj([
+        ["x", studioPx(l.x)],
+        ["y", studioPx(l.y)],
+        ["blur", studioPx(l.blur)],
+        ["spread", studioPx(l.spread)],
+        ["color", l.color],
+        ["type", l.inset ? "innerShadow" : "dropShadow"],
+      ]),
+    );
+    return list.length === 1 ? list[0] : list;
+  }
+  return value;
+}
+
+export function generateFigma({ theme, name }: ExportInput): string {
+  const alias = roleAliasResolver(theme);
+  const { light, dark } = modes(theme);
+  const global = nestGroups(tokenGroups(theme), (group, _key, value) =>
+    obj([
+      ["value", studioValue(group, value)],
+      ["type", group.type === "color" ? "color" : STUDIO_TYPES[group.path.join(".")] ?? "other"],
+    ]),
+  );
+  const modeSet = (palette: ModePalette) =>
+    obj(
+      ROLE_KEYS.map((key) => {
+        const path = alias(key, palette[key]);
+        return [key, obj([["value", path ? `{${path.join(".")}}` : palette[key]], ["type", "color"]])];
+      }),
+    );
+  const themeEntry = (id: "light" | "dark", label: string) =>
+    obj([
+      ["id", id],
+      ["name", label],
+      ["group", displayName(name)],
+      ["selectedTokenSets", obj([["global", "source"], [id, "enabled"]])],
+    ]);
+
+  const root = obj([
+    ["global", global],
+    ["light", modeSet(light)],
+    ["dark", modeSet(dark)],
+    ["$themes", [themeEntry("light", "Light"), themeEntry("dark", "Dark")]],
+    ["$metadata", obj([["tokenSetOrder", ["global", "light", "dark"]]])],
+  ]);
+  return serialize(root, "json") + "\n";
+}
+
+/* ---------- Registry ---------- */
+
+export const EXPORT_FORMATS: ExportFormat[] = [
+  {
+    id: "css",
+    label: "CSS Variables",
+    description: "Custom properties, light and dark",
+    fileName: "tokens.css",
+    language: "css",
+    mime: "text/css",
+    hint: "Import once in your global stylesheet. Set data-theme on <html> to force light or dark.",
+    usage: '@import "./tokens.css";',
+    generate: generateCSS,
+  },
+  {
+    id: "scss",
+    label: "SCSS Tokens",
+    description: "Variables, maps and a mode mixin",
+    fileName: "_tokens.scss",
+    language: "scss",
+    mime: "text/x-scss",
+    hint: "Save as a partial and load it where you need tokens. The mixin prints role colors as custom properties.",
+    usage: '@use "tokens" as *;',
+    generate: generateSCSS,
+  },
+  {
+    id: "js",
+    label: "JS Object",
+    description: "One theme object, both modes",
+    fileName: "theme.js",
+    language: "js",
+    mime: "text/javascript",
+    hint: "An ES module with every token and both color modes. Works with CSS-in-JS, React Native and charts.",
+    usage: 'import { theme } from "./theme";',
+    generate: generateJS,
+  },
+  {
+    id: "stylemap",
+    label: "Style Map",
+    description: "React inline style presets",
+    fileName: "styles.js",
+    language: "js",
+    mime: "text/javascript",
+    hint: "Type presets plus createStyles(mode) for surfaces, buttons, inputs and badges.",
+    usage: 'import { createStyles, text } from "./styles";',
+    generate: generateStyleMap,
+  },
+  {
+    id: "tailwind",
+    label: "Tailwind Extend",
+    description: "theme.extend for your config",
+    fileName: "tailwind.config.js",
+    language: "js",
+    mime: "text/javascript",
+    hint: "Merge into your Tailwind config. Pair with tokens.css so role colors follow light and dark.",
+    usage: "bg-surface text-text-secondary rounded-lg",
+    generate: generateTailwind,
+  },
+  {
+    id: "w3c",
+    label: "W3C Design Tokens",
+    description: "DTCG $value and $type JSON",
+    fileName: "tokens.json",
+    language: "json",
+    mime: "application/json",
+    hint: "Design Tokens Community Group format for Style Dictionary, Terrazzo and other token pipelines.",
+    usage: "style-dictionary build",
+    generate: generateW3C,
+  },
+  {
+    id: "figma",
+    label: "Figma Tokens JSON",
+    description: "Tokens Studio, Light and Dark",
+    fileName: "figma-tokens.json",
+    language: "json",
+    mime: "application/json",
+    hint: "In Figma, open Tokens Studio and load this file. Light and Dark arrive as themes over one global set.",
+    usage: "Tokens Studio: Load from file",
+    generate: generateFigma,
+  },
+];
+
+export function getExportFormat(id: ExportFormatId): ExportFormat {
+  return EXPORT_FORMATS.find((f) => f.id === id) ?? EXPORT_FORMATS[0];
 }

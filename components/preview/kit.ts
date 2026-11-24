@@ -40,9 +40,18 @@ function adaptShadow(value: string, ink: string, scale: number): string {
   });
 }
 
+/** The first ink reaching AA on every stop wins, so a preferred light ink is kept whenever it is legible. */
 function bestInk(stops: string[], candidates: string[]): string {
   const score = (c: string) => Math.min(...stops.map((s) => contrast(c, s)));
-  return candidates.reduce((best, c) => (score(c) > score(best) ? c : best), candidates[0]);
+  return (
+    candidates.find((c) => score(c) >= 4.5) ??
+    candidates.reduce((best, c) => (score(c) > score(best) ? c : best), candidates[0])
+  );
+}
+
+/** The first fill white text reads on at AA; the first candidate when none qualifies. */
+function deepenForWhite(steps: string[]): string {
+  return steps.find((c) => contrast("#ffffff", c) >= 4.5) ?? steps[0];
 }
 
 /**
@@ -54,8 +63,10 @@ export function previewVars(theme: ThemeTokens, dark: boolean): CSSProperties {
   const { primary: P, accent: A, neutral: N } = theme.color;
   const t = theme.typography;
 
-  const brandFrom = p.primary;
-  const brandTo = mix(p.primary, p.accent, 0.7);
+  // Brand surfaces carry white type wherever the hue allows it; light hues such as gold keep their vividness and get dark ink.
+  const brandFrom = deepenForWhite([p.primary, P[600], P[700]]);
+  const brandTo = mix(brandFrom, deepenForWhite([p.accent, A[600], A[700]]), 0.7);
+  const danger = deepenForWhite([p.error, mix(p.error, "#000000", 0.12), mix(p.error, "#000000", 0.24)]);
 
   const vars: Record<string, string> = {
     "--pv-bg": p.background,
@@ -94,7 +105,8 @@ export function previewVars(theme: ThemeTokens, dark: boolean): CSSProperties {
     "--pv-neutral": dark ? N[500] : N[400],
     "--pv-neutral-soft": dark ? mix(p.surface, p.text, 0.08) : N[100],
     "--pv-neutral-text": p.textSecondary,
-    "--pv-on-error": bestInk([p.error], ["#ffffff", N[950]]),
+    "--pv-danger": danger,
+    "--pv-on-danger": bestInk([danger], ["#ffffff", N[950]]),
     "--pv-field": dark ? mix(p.background, p.surface, 0.35) : p.surface,
     "--pv-hover": mix(p.surface, p.text, dark ? 0.06 : 0.04),
     "--pv-press": mix(p.surface, p.text, dark ? 0.1 : 0.07),
@@ -105,9 +117,10 @@ export function previewVars(theme: ThemeTokens, dark: boolean): CSSProperties {
     "--pv-series-2": dark ? A[400] : A[500],
     "--pv-series-3": P[300],
     "--pv-series-4": dark ? N[600] : N[300],
+    "--pv-series-faint": mix(p.surface, p.primary, dark ? 0.3 : 0.2),
     "--pv-brand-from": brandFrom,
     "--pv-brand-to": brandTo,
-    "--pv-on-brand": bestInk([brandFrom, brandTo], [p.onPrimary, "#ffffff", N[950]]),
+    "--pv-on-brand": bestInk([brandFrom, brandTo], ["#ffffff", N[950]]),
     "--pv-glow-1": withAlpha(p.primary, dark ? 0.32 : 0.2),
     "--pv-glow-2": withAlpha(p.accent, dark ? 0.24 : 0.16),
     "--pv-device": dark ? mix(mix(N[900], N[950], 0.5), "#ffffff", 0.1) : mix(N[950], "#000000", 0.55),

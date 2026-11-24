@@ -813,14 +813,16 @@ const DashboardScreen = memo(function DashboardScreen({ theme, dark }: ScreenPro
         <TopBar />
         <main className="preview-scroll min-h-0 flex-1 overflow-y-auto">
           <div className="mx-auto flex max-w-[1320px] flex-col gap-[var(--pv-sp-5)] p-[var(--pv-sp-6)] animate-[pv-rise_var(--pv-dur-slow)_var(--pv-ease)_both]">
-            <div className="flex flex-wrap items-end justify-between gap-4">
-              <div className="min-w-0">
-                <h1 style={type("2xl", "semibold", "display")}>Good morning, Maya</h1>
-                <p className="mt-1 text-[var(--pv-text-2)]" style={type("sm")}>
+            <div className="flex items-end justify-between gap-6">
+              <div className="min-w-0 flex-1">
+                <h1 className="truncate" style={type("2xl", "semibold", "display")}>
+                  Good morning, Maya
+                </h1>
+                <p className="mt-1 text-[var(--pv-text-2)] [text-wrap:pretty]" style={type("sm")}>
                   Here’s how Acme Inc performed over the last 12 months.
                 </p>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex shrink-0 items-center gap-2">
                 <Segmented options={["12M", "30D", "7D", "24H"]} value="12M" />
                 <Button icon={Calendar} iconRight={ChevronDown}>
                   Dec 2025 – Nov 2026

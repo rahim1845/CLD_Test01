@@ -95,7 +95,7 @@ const BUTTON_VARIANT: Record<ButtonVariant, string> = {
   ghost: "text-[var(--pv-text-2)] hover:bg-[var(--pv-hover)] hover:text-[var(--pv-text)]",
   soft: "bg-[var(--pv-primary-soft)] text-[var(--pv-primary-text)] hover:brightness-[0.97]",
   danger:
-    "bg-[var(--pv-error)] text-[var(--pv-on-error)] shadow-[var(--pv-sh-xs),inset_0_1px_0_rgb(255_255_255/0.14)] hover:brightness-[1.06]",
+    "bg-[var(--pv-danger)] text-[var(--pv-on-danger)] shadow-[var(--pv-sh-xs),inset_0_1px_0_rgb(255_255_255/0.14)] hover:brightness-[1.08]",
 };
 
 const BUTTON_SIZE: Record<ButtonSize, { cls: string; text: SizeKey; icon: number }> = {

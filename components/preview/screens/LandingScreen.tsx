@@ -142,6 +142,7 @@ const FOOTER: { title: string; links: string[] }[] = [
 ];
 
 const BARS = [42, 56, 48, 64, 58, 72, 88];
+const MRR = [38, 41, 40, 46, 49, 47, 55, 58, 57, 63, 69, 72, 78];
 const MINI_NAV: { icon: LucideIcon; label: string }[] = [
   { icon: LayoutDashboard, label: "Overview" },
   { icon: ChartSpline, label: "Forecasts" },
@@ -217,9 +218,9 @@ function ProductShot() {
             "radial-gradient(50% 60% at 30% 50%, var(--pv-glow-1), transparent 70%), radial-gradient(45% 60% at 75% 40%, var(--pv-glow-2), transparent 70%)",
         }}
       />
-      <div className="relative [mask-image:linear-gradient(to_bottom,black_80%,transparent)]">
+      <div className="relative [mask-image:linear-gradient(to_bottom,black_78%,transparent)]">
         <div className="rounded-[var(--pv-r-2xl)] border border-[var(--pv-border)] bg-[color-mix(in_srgb,var(--pv-surface)_72%,transparent)] p-2 shadow-[var(--pv-sh-2xl)] backdrop-blur">
-          <div className="grid h-[360px] grid-cols-[184px_minmax(0,1fr)] overflow-hidden rounded-[var(--pv-r-xl)] border border-[var(--pv-border)] bg-[var(--pv-bg)]">
+          <div className="grid h-[392px] grid-cols-[184px_minmax(0,1fr)] overflow-hidden rounded-[var(--pv-r-xl)] border border-[var(--pv-border)] bg-[var(--pv-bg)]">
             <aside className="flex flex-col gap-1 border-r border-[var(--pv-border)] bg-[var(--pv-surface)] p-3">
               <div className="mb-3 flex items-center gap-2 px-1.5 pt-1">
                 <BrandMark size={22} />
@@ -269,7 +270,7 @@ function ProductShot() {
                   </Card>
                 ))}
               </div>
-              <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)] gap-3">
+              <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)] grid-rows-[minmax(0,1fr)] gap-3">
                 <Card className="flex min-h-0 flex-col p-3">
                   <div className="flex items-center justify-between" style={type("xs", "medium")}>
                     <span className="text-[var(--pv-text-2)]">Recurring revenue</span>
@@ -281,11 +282,9 @@ function ProductShot() {
                       Live
                     </span>
                   </div>
-                  <Sparkline
-                    data={[38, 41, 40, 46, 49, 47, 55, 58, 57, 63, 69, 72, 78]}
-                    domain={[10, 84]}
-                    className="mt-2 min-h-0 w-full flex-1"
-                  />
+                  <div className="relative mt-2 min-h-0 flex-1">
+                    <Sparkline data={MRR} domain={[20, 84]} className="absolute inset-0 size-full" />
+                  </div>
                 </Card>
                 <Card className="flex min-h-0 flex-col p-3">
                   <span className="text-[var(--pv-text-2)]" style={type("xs", "medium")}>
@@ -297,9 +296,7 @@ function ProductShot() {
                         key={i}
                         className={cx(
                           "flex-1 origin-bottom rounded-t-[var(--pv-r-sm)] animate-[pv-grow-y_var(--pv-dur-slower)_var(--pv-ease)_both]",
-                          i === BARS.length - 1
-                            ? "bg-[var(--pv-series-1)]"
-                            : "bg-[color-mix(in_srgb,var(--pv-series-1)_28%,transparent)]",
+                          i === BARS.length - 1 ? "bg-[var(--pv-series-1)]" : "bg-[var(--pv-series-faint)]",
                         )}
                         style={{ height: `${h}%`, animationDelay: `${i * 40}ms` }}
                       />

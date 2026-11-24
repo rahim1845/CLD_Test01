@@ -1,10 +1,16 @@
 export { cn } from "./cn";
+export { Button, buttonClass, type ButtonProps, type ButtonSize, type ButtonVariant } from "./Button";
 export { Kbd } from "./Kbd";
 export { Tooltip, type TooltipProps } from "./Tooltip";
 export { SegmentedControl, type SegmentedControlProps, type SegmentedOption } from "./SegmentedControl";
 export { IconButton, type IconButtonProps } from "./IconButton";
 export { Badge, type BadgeProps, type BadgeTone } from "./Badge";
+export { SectionLabel, SECTION_LABEL_CLASS } from "./SectionLabel";
+export { PANEL_TOOLBAR_CLASS } from "./panel";
 export { LogoMark } from "./LogoMark";
 export { LOGO_MARK_SVG } from "./logoMarkSvg";
+export { copyText } from "./clipboard";
 export { useHotkeys, isEditableTarget } from "./useHotkeys";
+export { useIsMac } from "./useIsMac";
 export { useMounted } from "./useMounted";
+export { useReducedMotion } from "./useReducedMotion";
